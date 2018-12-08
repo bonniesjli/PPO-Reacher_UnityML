@@ -72,6 +72,9 @@ class PPOAgent(object):
         env_info = self.environment.reset(train_mode=True)[self.brain_name]    
         self.states = env_info.vector_observations  
         states = self.states
+        """
+        Each iteration, N parallel actors collect T time steps of data
+        """
         for _ in range(ROLLOUT_LENGTH):
             actions, log_probs, _, values = self.network(states)
             env_info = self.environment.step(actions.cpu().detach().numpy())[self.brain_name]
@@ -95,6 +98,8 @@ class PPOAgent(object):
         processed_rollout = [None] * (len(rollout) - 1)
         advantages = torch.Tensor(np.zeros((num_agents, 1)))
         returns = pending_value.detach()
+   
+        """        Compute advantage estimates A1, . . . , AT   """
         for i in reversed(range(len(rollout) - 1)):
             states, value, actions, log_probs, rewards, terminals = rollout[i]
             terminals = torch.Tensor(terminals).unsqueeze(1)
@@ -113,6 +118,11 @@ class PPOAgent(object):
         advantages = (advantages - advantages.mean()) / advantages.std()
 
         batcher = Batcher(states.size(0) // BATCH_SIZE, [np.arange(states.size(0))])
+        
+        """
+        Construct surrogate loss on NT timesteps of data
+        Optimize it with minibatch SGD, with K Epochs and minibatch size M <= NT
+        """
         for _ in range(NUM_EPOCHS):
             batcher.shuffle()
             while not batcher.end():
